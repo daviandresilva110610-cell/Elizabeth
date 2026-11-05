@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Elizabeth – Podologia e Pedicure</title>
+<meta name="description" content="Cuidado, saúde e leveza para os seus pés.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ================= SITE PÚBLICO ================= -->
+<div id="site">
+  <header class="top">
+    <a class="brand" href="#inicio">Elizabeth</a>
+    <nav aria-label="Principal">
+      <a href="#servicos">Serviços</a>
+      <a href="#agendar">Agendar</a>
+      <a href="#contato">Contato</a>
+    </nav>
+    <a class="btn small" href="#agendar">Agendar</a>
+  </header>
+
+  <main>
+    <!-- Apresentação -->
+    <section id="inicio" class="hero">
+      <h1>Cuidado, saúde e leveza para os seus pés</h1>
+      <p>Podologia e pedicure com atendimento individual, em um ambiente calmo e acolhedor.</p>
+      <a class="btn" href="#agendar">Agendar Consulta →</a>
+    </section>
+
+    <!-- Catálogo (preenchido pelo script.js) -->
+    <section id="servicos" class="bloco">
+      <h2>Serviços</h2>
+      <ul id="lista-servicos" class="servicos"></ul>
+    </section>
+
+    <!-- Agendamento -->
+    <section id="agendar" class="bloco">
+      <h2>Agendar</h2>
+      <form id="form-agenda" class="form" novalidate>
+        <label>Nome completo <input name="nome" autocomplete="name" required></label>
+        <label>WhatsApp <input id="f-whats" name="whats" inputmode="numeric" placeholder="(00) 00000-0000" autocomplete="tel-national" required></label>
+        <label>Serviço <select id="f-servico" name="servico" required></select></label>
+        <div class="duas">
+          <label>Data <input id="f-data" type="date" name="data" required></label>
+          <label>Horário <select id="f-hora" name="hora" required><option value="">Escolha</option></select></label>
+        </div>
+        <p id="erro" class="erro" role="alert"></p>
+        <button class="btn" type="submit">Solicitar horário</button>
+      </form>
+      <div id="ok" class="ok" role="status" hidden>
+        <h3>Solicitação enviada!</h3>
+        <p>Entraremos em contato em breve para confirmar seu horário.</p>
+        <button id="novo" class="btn ghost small" type="button">Fazer outro agendamento</button>
+      </div>
+    </section>
+  </main>
+
+  <footer id="contato" class="rodape">
+    <div>
+      <h3>Elizabeth</h3>
+      <p>Rua Exemplo, 123 – Centro</p>
+      <p>Seg a sex, 9h às 18h · Sáb, 9h às 13h</p>
+      <p><a id="link-whats" href="#" target="_blank" rel="noopener">Conversar no WhatsApp</a></p>
+    </div>
+    <button id="abrir-admin" class="discreto" type="button">Painel da Empresa</button>
+  </footer>
+</div>
+
+<!-- ================= PAINEL DA EMPRESA ================= -->
+<div id="admin" hidden>
+  <header class="top">
+    <span class="brand">Elizabeth · Painel</span>
+    <span>
+      <button id="voltar" class="btn small ghost" type="button">Voltar ao site</button>
+      <button id="sair" class="btn small ghost" type="button" hidden>Sair</button>
+    </span>
+  </header>
+
+  <main class="bloco">
+    <!-- Login -->
+    <form id="form-login" class="form" novalidate>
+      <h2>Acesso da equipe</h2>
+      <label>E-mail <input id="email" type="email" autocomplete="username"></label>
+      <label>Senha <input id="senha" type="password" autocomplete="current-password"></label>
+      <p id="login-erro" class="erro" role="alert"></p>
+      <button class="btn" type="submit">Entrar</button>
+    </form>
+
+    <!-- Painel -->
+    <div id="painel" hidden>
+      <h2>Agendamentos</h2>
+      <ul id="lista-ag" class="linhas"></ul>
+
+      <h2>Serviços</h2>
+      <ul id="lista-serv-adm" class="linhas"></ul>
+
+      <form id="form-serv" class="form">
+        <h3>Novo serviço</h3>
+        <label>Nome <input name="nome" required></label>
+        <label>Descrição <input name="desc"></label>
+        <div class="duas">
+          <label>Duração <input name="dur" placeholder="50 min" required></label>
+          <label>Preço (R$) <input name="preco" inputmode="decimal" placeholder="80" required></label>
+        </div>
+        <button class="btn" type="submit">Adicionar serviço</button>
+      </form>
+    </div>
+  </main>
+</div>
+
+<script type="module" src="script.js"></script>
+</body>
+</html>
