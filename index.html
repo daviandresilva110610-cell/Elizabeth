@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<canvas id="fundo" aria-hidden="true"></canvas>
 
 <!-- ================= SITE PÚBLICO ================= -->
 <div id="site">
@@ -44,11 +45,9 @@
       <form id="form-agenda" class="form" novalidate>
         <label>Nome completo <input name="nome" autocomplete="name" required></label>
         <label>WhatsApp <input id="f-whats" name="whats" inputmode="numeric" placeholder="(00) 00000-0000" autocomplete="tel-national" required></label>
-        <label>Serviço <select id="f-servico" name="servico" required></select></label>
-        <div class="duas">
-          <label>Data <input id="f-data" type="date" name="data" required></label>
-          <label>Horário <select id="f-hora" name="hora" required><option value="">Escolha</option></select></label>
-        </div>
+        <fieldset><legend>Serviço</legend><div id="f-servico" class="opcoes"></div></fieldset>
+        <label>Data <input id="f-data" type="date" name="data" required></label>
+        <fieldset><legend>Horário</legend><div id="f-hora" class="chips"></div><p id="dica-hora" class="dica">Escolha uma data para ver os horários livres.</p></fieldset>
         <p id="erro" class="erro" role="alert"></p>
         <button class="btn" type="submit">Solicitar horário</button>
       </form>
