@@ -44,9 +44,9 @@ const el = (tag, cls, txt) => {
 // Valor da opção marcada (radio) de um grupo
 const marcado = n => ($(`#form-agenda input[name="${n}"]:checked`) || {}).value || '';
 // Opção clicável (serviço ou horário)
-function opcao(name, value, titulo, detalhe, on, off) {
+function opcao(name, value, titulo, detalhe, on, off, tipo) {
   const l = el('label', 'op'), i = document.createElement('input'), s = el('span');
-  i.type = 'radio'; i.name = name; i.value = value; i.checked = !!on; i.disabled = !!off;
+  i.type = tipo || 'radio'; i.name = name; i.value = value; i.checked = !!on; i.disabled = !!off;
   s.append(el('strong', '', titulo));
   if (detalhe) s.append(el('small', '', detalhe));
   l.append(i, s);
@@ -55,7 +55,7 @@ function opcao(name, value, titulo, detalhe, on, off) {
 
 /* ---------- Estado ---------- */
 const CACHE = 'eliz_servicos_cache';
-let servicos = [], ags = [], ocupados = new Set(), usuario = null, authPronto = false, cancelaAgs = null;
+let servicos = [], ags = [], horariosDocs = [], ocupados = new Set(), usuario = null, authPronto = false, cancelaAgs = null;
 let msgServ = 'Carregando serviços…';
 let emAdmin = location.hash === '#painel';   // lembra o painel ao recarregar a página
 // Mostra os últimos serviços salvos no aparelho enquanto a internet responde
@@ -83,13 +83,15 @@ function renderSite() {
 function renderHoras() {
   const box = $('#f-hora'), data = $('#f-data').value, atual = marcado('hora');
   box.replaceChildren();
-  $('#dica-hora').hidden = !!data;
+  const dica = $('#dica-hora');
+  dica.hidden = !!data; dica.textContent = 'Escolha uma data para ver os horários livres.';
   if (!data) return;
   const hoje = $('#f-data').min, agora = new Date().toTimeString().slice(0, 5);
   HORAS.forEach(h => {
     const off = ocupados.has(`${data}_${h}`) || (data === hoje && h <= agora);
     box.append(opcao('hora', h, h, '', h === atual && !off, off));
   });
+  if (!box.querySelector('input:not(:disabled)')) { dica.hidden = false; dica.textContent = 'Não há horários livres neste dia. Escolha outra data.'; }
 }
 
 /* Leitura e reserva pelo endereço REST do Firestore (fetch comum).
@@ -125,23 +127,82 @@ async function carregarPublico() {
     const [sv, hs] = await Promise.all([listar('servicos'), listar('horarios')]);
     servicos = sv.sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
     ocupados = new Set(hs.map(d => d.id));
+    horariosDocs = hs;
     msgServ = 'Novos serviços em breve.';
     try { localStorage.setItem(CACHE, JSON.stringify(servicos)); } catch (e) {}
   } catch (e) {
     ok = false;
     if (!servicos.length) msgServ = 'Não foi possível carregar os serviços. Tentando de novo…';
   }
+  if (ok) atualizarMeu();
   const nova = JSON.stringify([servicos, [...ocupados], msgServ]);
   if (nova !== assinatura) { assinatura = nova; renderSite(); renderHoras(); renderAdmin(); }   // só redesenha se mudou
   timer = setTimeout(carregarPublico, ok ? 20000 : 5000);
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) carregarPublico(); });
 
+/* ---------- Avisos (notificações) ----------
+   Aparecem enquanto o site/painel estiver aberto no navegador (mesmo em segundo plano).
+   Usam o sw.js, que é o que faz as notificações funcionarem também no Android. */
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+const temAviso = 'Notification' in window;
+const pedirAviso = async () => temAviso && (await Notification.requestPermission()) === 'granted';   // precisa de um toque
+function avisar(titulo, corpo) {
+  if (!temAviso || Notification.permission !== 'granted') return;
+  const opcoes = {body: corpo, data: location.href, tag: titulo};
+  (navigator.serviceWorker ? navigator.serviceWorker.ready : Promise.reject())
+    .then(r => r.showNotification(titulo, opcoes))
+    .catch(() => { try { new Notification(titulo, opcoes); } catch (e) {} });
+}
+function bip() {
+  try {
+    const c = new (window.AudioContext || window.webkitAudioContext)(), o = c.createOscillator(), g = c.createGain();
+    o.connect(g); g.connect(c.destination); o.frequency.value = 880; g.gain.value = .15;
+    o.start(); o.stop(c.currentTime + .25);
+  } catch (e) {}
+}
+const tituloBase = document.title;
+let naoLidos = 0, agsVistos = null;
+const zera = () => { if (naoLidos) { naoLidos = 0; document.title = tituloBase; } };
+addEventListener('focus', zera);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) zera(); });
+
+// Empresa: chegou pedido novo (faixa na tela, som, título da aba e notificação)
+function novoPedido(lista) {
+  const a = lista[0];
+  const txt = lista.length > 1 ? `${lista.length} novos pedidos de agendamento` : `${a.nome} · ${a.servicoNome} · ${dataBR(a.data)} às ${a.hora}`;
+  naoLidos += lista.length;
+  document.title = `(${naoLidos}) Novo pedido · Elizabeth`;
+  $('#aviso-painel').textContent = 'Novo pedido: ' + txt + ' (toque para fechar)';
+  $('#aviso-painel').hidden = false;
+  bip(); avisar('Novo pedido de agendamento', txt);
+}
+$('#aviso-painel').onclick = () => { $('#aviso-painel').hidden = true; };
+
+// Botões "ativar avisos" (painel e cliente): só aparecem se ainda não foi decidido
+const semPedido = !temAviso || Notification.permission !== 'default';
+$('#ativar-avisos').hidden = $('#ativar-aviso-cli').hidden = semPedido;
+$('#ativar-avisos').onclick = async () => {
+  const ok = await pedirAviso(); $('#ativar-avisos').hidden = true;
+  if (ok) avisar('Avisos ativados', 'Você será avisada dos novos pedidos enquanto o painel estiver aberto.');
+};
+$('#ativar-aviso-cli').onclick = async () => {
+  const ok = await pedirAviso(); $('#ativar-aviso-cli').hidden = true;
+  if (ok) avisar('Aviso ativado', 'Você será avisado quando a Elizabeth confirmar o horário (com o site aberto).');
+};
+
 /* ---------- Cancelamento pelo cliente ----------
    Cada pedido tem um código longo e impossível de adivinhar (o próprio id).
    Só quem tem o link (?cancelar=codigo) consegue ver e cancelar aquele pedido. */
 const idCancelar = new URLSearchParams(location.search).get('cancelar');
 const linkCancelar = id => `${location.origin}${location.pathname}?cancelar=${id}`;
+// Prazo: cancelar até 24 h antes do atendimento (horário de Brasília, UTC-3)
+const inicioAg = a => new Date(`${a.data}T${a.hora}:00-03:00`).getTime();
+const noPrazo = a => Date.now() < inicioAg(a) - 864e5;
+const prazoTxt = a => {   // mesmo horário, um dia antes
+  const d = new Date(`${a.data}T12:00:00Z`); d.setUTCDate(d.getUTCDate() - 1);
+  return `${dataBR(d.toISOString().slice(0, 10))} às ${a.hora}`;
+};
 const novoId = () => {
   try { return [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join(''); }
   catch (e) { return Date.now().toString(36) + Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 12); }
@@ -161,6 +222,13 @@ async function abrirCancelar(id) {
     const a = await lerAg(id);
     info.textContent = `${a.servicoNome} · ${dataBR(a.data)} às ${a.hora} · ${a.nome}`;
     if (a.status === 'cancelado') { msg.textContent = 'Este agendamento já foi cancelado.'; return; }
+    $('#cancelar-prazo').textContent = `Prazo para cancelar: até ${prazoTxt(a)} (24 horas antes do atendimento).`;
+    if (!noPrazo(a)) {
+      msg.textContent = 'O prazo de cancelamento já terminou. Para alterar este horário, fale com a Elizabeth pelo WhatsApp.';
+      $('#cancelar-whats').href = 'https://wa.me/' + WHATS_ESTUDIO;
+      $('#cancelar-whats').hidden = false;
+      return;
+    }
     btn.hidden = false;
     btn.onclick = async () => {
       if (!confirm('Cancelar este agendamento?')) return;
@@ -180,7 +248,9 @@ async function abrirCancelar(id) {
         try { if (localStorage.getItem('eliz_meu') === id) localStorage.removeItem('eliz_meu'); } catch (e) {}
       } catch (e) {
         btn.disabled = false;
-        msg.textContent = 'Não foi possível cancelar agora. Tente de novo ou chame no WhatsApp.';
+        msg.textContent = e.status === 403
+          ? 'Não foi possível cancelar: o prazo de 24 horas antes do atendimento pode já ter terminado. Fale com a Elizabeth pelo WhatsApp.'
+          : 'Não foi possível cancelar agora. Tente de novo ou chame no WhatsApp.';
       }
     };
   } catch (e) {
@@ -190,16 +260,20 @@ async function abrirCancelar(id) {
   }
 }
 
-// Quem volta ao site no mesmo aparelho vê o próprio agendamento, com atalho para cancelar
-async function lembrarMeu() {
-  let id; try { id = localStorage.getItem('eliz_meu'); } catch (e) {}
-  if (!id) return;
+// Acompanha o próprio pedido neste aparelho (a cada 20 s): mostra o estado e avisa quando for confirmado
+async function atualizarMeu() {
+  let id, ult; try { id = localStorage.getItem('eliz_meu'); ult = localStorage.getItem('eliz_meu_status'); } catch (e) {}
+  if (!id || idCancelar) return;
   try {
-    const a = await lerAg(id);
-    if (a.status === 'cancelado' || a.data < $('#f-data').min) return;
+    const a = await lerAg(id), conf = a.status === 'confirmado';
+    if (a.status === 'cancelado' || a.data < $('#f-data').min) { $('#meu').hidden = true; return; }
     $('#meu-txt').textContent = `${a.servicoNome} · ${dataBR(a.data)} às ${a.hora}`;
+    $('#meu-status').textContent = conf ? 'Confirmado! Esperamos você.' : 'Aguardando a confirmação da Elizabeth.';
     $('#meu-link').href = linkCancelar(id);
+    $('#meu').classList.toggle('confirmado', conf);
     $('#meu').hidden = false;
+    if (conf && ult !== 'confirmado') avisar('Agendamento confirmado!', `${a.servicoNome} · ${dataBR(a.data)} às ${a.hora}`);
+    try { localStorage.setItem('eliz_meu_status', a.status); } catch (e) {}
   } catch (e) {}
 }
 
@@ -239,7 +313,10 @@ $('#form-agenda').addEventListener('submit', async e => {
     ]});
     ocupados.add(slot);
     $('#ok-link').href = linkCancelar(id);
-    try { localStorage.setItem('eliz_meu', id); } catch (e) {}
+    try { localStorage.setItem('eliz_meu', id); localStorage.setItem('eliz_meu_status', 'pendente'); } catch (e) {}
+    // Atalho para a cliente avisar a Elizabeth também pelo WhatsApp
+    $('#ok-whats').href = `https://wa.me/${WHATS_ESTUDIO}?text=` + encodeURIComponent(
+      `Olá! Solicitei um horário pelo site: ${serv.nome}, ${dataBR(data)} às ${hora}. Nome: ${v('nome')}.`);
     f.reset(); renderHoras(); f.hidden = true; $('#ok').hidden = false;
   } catch (err) {
     $('#erro').textContent = err.status
@@ -265,7 +342,7 @@ function renderAdmin() {
     conf.disabled = a.status !== 'pendente';
     conf.onclick = () => updateDoc(doc(db, 'agendamentos', a.id), {status:'confirmado'}).catch(falha);
 
-    const msg = `Olá, ${a.nome.split(' ')[0]}! Seu horário (${a.servicoNome}) no estúdio Elizabeth está confirmado para ${dataBR(a.data)} às ${a.hora}. Até lá! Para consultar ou cancelar: ${linkCancelar(a.id)}`;
+    const msg = `Olá, ${a.nome.split(' ')[0]}! Seu horário (${a.servicoNome}) no estúdio Elizabeth está confirmado para ${dataBR(a.data)} às ${a.hora}. Até lá! Para consultar ou cancelar (até 24h antes do atendimento): ${linkCancelar(a.id)}`;
     const wpp = el('a', 'btn small ghost', 'WhatsApp');
     wpp.href = `https://wa.me/55${a.whats.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
     wpp.target = '_blank'; wpp.rel = 'noopener';
@@ -282,6 +359,24 @@ function renderAdmin() {
     acoes.append(...(a.status === 'cancelado' ? [canc] : [conf, wpp, canc]));
     li.append(info, el('span', 'tag ' + a.status, a.status === 'confirmado' ? 'Confirmado' : a.status === 'cancelado' ? 'Cancelado pelo cliente' : 'Pendente'), acoes);
     lista.append(li);
+  });
+
+  // Dias e horários bloqueados (indisponíveis para as clientes)
+  const grupos = {}, hoje = $('#f-data').min, lb = $('#lista-bloq');
+  horariosDocs.filter(d => d.tipo === 'bloqueio' && d.data >= hoje).forEach(d => (grupos[d.data] = grupos[d.data] || []).push(d.hora));
+  lb.replaceChildren();
+  const datas = Object.keys(grupos).sort();
+  if (!datas.length) lb.append(el('li', 'vazio', 'Nenhum dia ou horário bloqueado.'));
+  datas.forEach(d => {
+    const hh = grupos[d].sort(), li = el('li'), lib = el('button', 'btn small ghost', 'Liberar');
+    li.append(el('span', '', `${dataBR(d)} · ${hh.length === HORAS.length ? 'dia inteiro' : hh.join(', ')}`), lib);
+    lib.onclick = () => {
+      if (!confirm(`Liberar os horários de ${dataBR(d)}?`)) return;
+      const b = writeBatch(db);
+      hh.forEach(h => b.delete(doc(db, 'horarios', `${d}_${h}`)));
+      b.commit().then(carregarPublico).catch(falha);
+    };
+    lb.append(li);
   });
 
   const ls = $('#lista-serv-adm');
@@ -310,6 +405,39 @@ $('#form-serv').addEventListener('submit', e => {
   if (!v('nome') || !v('dur') || !(preco >= 0)) return;
   addDoc(collection(db, 'servicos'), {nome:v('nome'), desc:v('desc'), dur:v('dur'), preco, ordem:Date.now()})
     .then(() => { f.reset(); carregarPublico(); }).catch(falha);
+});
+
+/* ---------- Bloquear dias e horários ----------
+   Cada horário bloqueado vira um registro em "horarios" (igual a um horário reservado),
+   então já aparece desativado para as clientes. */
+const horasBloq = $('#b-horas');
+HORAS.forEach(h => horasBloq.append(opcao('bhora', h, h, '', false, false, 'checkbox')));
+$('#b-dia').addEventListener('change', e => { horasBloq.hidden = e.target.checked; });
+$('#form-bloq').addEventListener('submit', async e => {
+  e.preventDefault();
+  const de = $('#b-de').value, ate = $('#b-ate').value || de, erro = $('#b-erro');
+  const horas = $('#b-dia').checked ? HORAS : [...horasBloq.querySelectorAll('input:checked')].map(i => i.value);
+  if (!de || de < $('#f-data').min || ate < de || !horas.length) {
+    erro.textContent = 'Escolha uma data a partir de hoje (e o fim do período, se houver) e ao menos um horário.';
+    return;
+  }
+  const dias = [];
+  for (const d = new Date(de + 'T12:00:00Z'), fim = new Date(ate + 'T12:00:00Z'); d <= fim && dias.length < 62; d.setUTCDate(d.getUTCDate() + 1)) {
+    dias.push(d.toISOString().slice(0, 10));
+  }
+  // horários que já têm agendamento (ou bloqueio) são mantidos
+  const novos = dias.flatMap(d => horas.map(h => `${d}_${h}`)).filter(k => !ocupados.has(k));
+  const mantidos = dias.length * horas.length - novos.length;
+  try {
+    for (let i = 0; i < novos.length; i += 400) {
+      const b = writeBatch(db);
+      novos.slice(i, i + 400).forEach(k => { const [d, h] = k.split('_'); b.set(doc(db, 'horarios', k), {data: d, hora: h, tipo: 'bloqueio'}); });
+      await b.commit();
+    }
+    e.target.reset(); horasBloq.hidden = true;
+    erro.textContent = mantidos ? `${mantidos} horário(s) já estavam ocupados e foram mantidos.` : '';
+    carregarPublico();
+  } catch (err) { falha(err); }
 });
 
 /* ---------- Login e navegação site <-> painel ---------- */
@@ -341,9 +469,13 @@ $('#form-login').addEventListener('submit', e => {
 onAuthStateChanged(auth, u => {
   usuario = u; authPronto = true;
   if (cancelaAgs) { cancelaAgs(); cancelaAgs = null; }
+  agsVistos = null;   // a primeira carga não conta como "pedido novo"
   if (u) {
     cancelaAgs = onSnapshot(collection(db, 'agendamentos'), snap => {
       ags = snap.docs.map(d => ({id:d.id, ...d.data()}));
+      const novos = agsVistos ? ags.filter(a => !agsVistos.has(a.id) && a.status === 'pendente') : [];
+      agsVistos = new Set(ags.map(a => a.id));
+      if (novos.length) novoPedido(novos);
       renderAdmin();
     }, falha);
   } else ags = [];
@@ -393,4 +525,4 @@ function fundo() {
 }
 
 mostrar(emAdmin); renderSite(); renderHoras(); fundo(); carregarPublico();
-if (idCancelar) abrirCancelar(idCancelar); else lembrarMeu();
+if (idCancelar) abrirCancelar(idCancelar);
