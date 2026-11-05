@@ -11,10 +11,12 @@ import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
 /* ---------- Configurações (edite aqui) ---------- */
 // Cole aqui o firebaseConfig que o Firebase mostra ao registrar o app Web
 const firebaseConfig = {
-  apiKey: 'COLE_AQUI',
-  authDomain: 'COLE_AQUI',
-  projectId: 'COLE_AQUI',
-  appId: 'COLE_AQUI',
+  apiKey: "AIzaSyAH7FApR5PuDBH6g3Bo-iVAOdfLeWmbkeI",
+  authDomain: "elizabeth-site.firebaseapp.com",
+  projectId: "elizabeth-site",
+  storageBucket: "elizabeth-site.firebasestorage.app",
+  messagingSenderId: "650068318828",
+  appId: "1:650068318828:web:3b09d1dc7a2f52a3e65649"
 };
 const WHATS_ESTUDIO = '5511900000000'; // WhatsApp do estúdio: 55 + DDD + número
 const HORAS = ['09:00','10:00','11:00','13:00','14:00','15:00','16:00','17:00'];
