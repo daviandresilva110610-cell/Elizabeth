@@ -3,7 +3,7 @@
    Firebase (Firestore + Authentication), horários únicos e painel.
    ===================================================== */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js';
-import { initializeFirestore, collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, writeBatch }
+import { initializeFirestore, collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, writeBatch }
   from 'https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js';
@@ -92,19 +92,50 @@ function renderHoras() {
   });
 }
 
-// Serviços: qualquer visitante lê; atualiza sozinho quando a Elizabeth altera
-onSnapshot(collection(db, 'servicos'), snap => {
-  servicos = snap.docs.map(d => ({id:d.id, ...d.data()})).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
-  msgServ = 'Novos serviços em breve.';
-  try { localStorage.setItem(CACHE, JSON.stringify(servicos)); } catch (e) {}
-  renderSite(); renderAdmin();
-}, () => { msgServ = 'Não foi possível carregar os serviços. Atualize a página.'; renderSite(); });
-
-// Horários ocupados (só data e hora, sem dados pessoais)
-onSnapshot(collection(db, 'horarios'), snap => {
-  ocupados = new Set(snap.docs.map(d => d.id));
-  renderHoras();
-}, () => {});
+/* Leitura e reserva pelo endereço REST do Firestore (fetch comum).
+   Funciona em celulares/redes que bloqueiam a conexão em tempo real do SDK.
+   Atualiza sozinho a cada 20 s (e ao voltar para a aba). */
+const RAIZ = `projects/${firebaseConfig.projectId}/databases/(default)/documents`;
+const API = `https://firestore.googleapis.com/v1/${RAIZ}`, KEY = `key=${firebaseConfig.apiKey}`;
+const str = v => ({stringValue: v});
+async function pedir(url, corpo) {
+  const ac = new AbortController(), t = setTimeout(() => ac.abort(), 12000);   // desiste em 12 s
+  try {
+    const r = await fetch(url, {signal: ac.signal, ...(corpo && {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(corpo)})});
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error('http'), {status: r.status});
+    return j;
+  } finally { clearTimeout(t); }
+}
+const valor = f => 'stringValue' in f ? f.stringValue : 'integerValue' in f ? Number(f.integerValue) : 'doubleValue' in f ? f.doubleValue : '';
+async function listar(col) {
+  let docs = [], pg = '';
+  do {
+    const j = await pedir(`${API}/${col}?pageSize=300${pg}&${KEY}`);
+    docs.push(...(j.documents || []));
+    pg = j.nextPageToken ? '&pageToken=' + encodeURIComponent(j.nextPageToken) : '';
+  } while (pg);
+  return docs.map(d => { const o = {id: d.name.split('/').pop()}; for (const k in d.fields || {}) o[k] = valor(d.fields[k]); return o; });
+}
+let timer, assinatura = '';
+async function carregarPublico() {
+  clearTimeout(timer);
+  let ok = true;
+  try {
+    const [sv, hs] = await Promise.all([listar('servicos'), listar('horarios')]);
+    servicos = sv.sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+    ocupados = new Set(hs.map(d => d.id));
+    msgServ = 'Novos serviços em breve.';
+    try { localStorage.setItem(CACHE, JSON.stringify(servicos)); } catch (e) {}
+  } catch (e) {
+    ok = false;
+    if (!servicos.length) msgServ = 'Não foi possível carregar os serviços. Tentando de novo…';
+  }
+  const nova = JSON.stringify([servicos, [...ocupados], msgServ]);
+  if (nova !== assinatura) { assinatura = nova; renderSite(); renderHoras(); renderAdmin(); }   // só redesenha se mudou
+  timer = setTimeout(carregarPublico, ok ? 20000 : 5000);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) carregarPublico(); });
 
 $('#f-data').min = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
 $('#f-data').addEventListener('input', renderHoras);
@@ -128,20 +159,25 @@ $('#form-agenda').addEventListener('submit', async e => {
   }
   $('#erro').textContent = '';
   btn.disabled = true;
-  const slot = `${data}_${hora}`;
+  const slot = `${data}_${hora}`, base = RAIZ + '/';
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   try {
-    // Grava pedido + reserva do horário juntos. O horário tem código único:
-    // se outra pessoa reservou antes, o Firebase recusa e ninguém fica duplicado.
-    const b = writeBatch(db);
-    b.set(doc(collection(db, 'agendamentos')), {
-      nome: v('nome'), whats: v('whats'), servicoId: serv.id, servicoNome: serv.nome,
-      data, hora, slot, status: 'pendente', criado: serverTimestamp(),
-    });
-    b.set(doc(db, 'horarios', slot), {data, hora});
-    await b.commit();
+    // Pedido + reserva do horário num único envio (tudo ou nada). O horário tem código único:
+    // se outra pessoa reservou antes, o Firebase recusa (exists:false) e ninguém fica duplicado.
+    await pedir(`${API}:commit?${KEY}`, {writes: [
+      {update: {name: `${base}agendamentos/${id}`, fields: {
+        nome: str(v('nome')), whats: str(v('whats')), servicoId: str(serv.id), servicoNome: str(serv.nome),
+        data: str(data), hora: str(hora), slot: str(slot), status: str('pendente'),
+        criado: {timestampValue: new Date().toISOString()}}}, currentDocument: {exists: false}},
+      {update: {name: `${base}horarios/${slot}`, fields: {data: str(data), hora: str(hora)}}, currentDocument: {exists: false}},
+    ]});
+    ocupados.add(slot);
     f.reset(); renderHoras(); f.hidden = true; $('#ok').hidden = false;
   } catch (err) {
-    $('#erro').textContent = 'Não foi possível reservar este horário. Ele pode ter acabado de ser ocupado: escolha outro ou chame no WhatsApp.';
+    $('#erro').textContent = err.status
+      ? 'Não foi possível reservar este horário. Ele pode ter acabado de ser ocupado: escolha outro ou chame no WhatsApp.'
+      : 'Não foi possível enviar agora. Verifique a internet e tente de novo, ou chame no WhatsApp.';
+    carregarPublico();
   }
   btn.disabled = false;
 });
@@ -172,7 +208,7 @@ function renderAdmin() {
       const b = writeBatch(db);                       // apaga o pedido e libera o horário
       b.delete(doc(db, 'agendamentos', a.id));
       if (a.slot) b.delete(doc(db, 'horarios', a.slot));
-      b.commit().catch(falha);
+      b.commit().then(carregarPublico).catch(falha);
     };
 
     acoes.append(conf, wpp, canc);
@@ -184,15 +220,15 @@ function renderAdmin() {
   ls.replaceChildren();
   if (!servicos.length) {
     const li = el('li'), b = el('button', 'btn small ghost', 'Carregar serviços de exemplo');
-    b.onclick = () => seedServ.forEach((s, i) =>
-      addDoc(collection(db, 'servicos'), {...s, ordem: Date.now() + i}).catch(falha));
+    b.onclick = () => Promise.all(seedServ.map((s, i) =>
+      addDoc(collection(db, 'servicos'), {...s, ordem: Date.now() + i}))).then(carregarPublico).catch(falha);
     li.append(el('span', 'vazio', 'Nenhum serviço cadastrado.'), b);
     ls.append(li);
   }
   servicos.forEach(s => {
     const li = el('li'), del = el('button', 'btn small ghost', 'Excluir');
     del.onclick = () => {
-      if (confirm(`Excluir o serviço "${s.nome}"?`)) deleteDoc(doc(db, 'servicos', s.id)).catch(falha);
+      if (confirm(`Excluir o serviço "${s.nome}"?`)) deleteDoc(doc(db, 'servicos', s.id)).then(carregarPublico).catch(falha);
     };
     li.append(el('span', '', `${s.nome} · ${s.dur} · ${brl(s.preco)}`), del);
     ls.append(li);
@@ -205,7 +241,7 @@ $('#form-serv').addEventListener('submit', e => {
   const preco = parseFloat(v('preco').replace(',', '.'));
   if (!v('nome') || !v('dur') || !(preco >= 0)) return;
   addDoc(collection(db, 'servicos'), {nome:v('nome'), desc:v('desc'), dur:v('dur'), preco, ordem:Date.now()})
-    .then(() => f.reset()).catch(falha);
+    .then(() => { f.reset(); carregarPublico(); }).catch(falha);
 });
 
 /* ---------- Login e navegação site <-> painel ---------- */
@@ -257,30 +293,34 @@ if ('IntersectionObserver' in window) {
 function fundo() {
   const c = $('#fundo'), x = c.getContext && c.getContext('2d');
   if (!x) return;
-  const reduz = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  // Se o aparelho pede "reduzir movimento" (comum no Android com economia de bateria
+  // ou "Remover animações"), as linhas ficam mais lentas e suaves, em vez de desligar.
+  const suave = matchMedia('(prefers-reduced-motion:reduce)').matches;
   let w, h, t = 0;
   const ajusta = () => {
     const d = Math.min(devicePixelRatio || 1, 2);
     w = innerWidth; h = innerHeight; c.width = w * d; c.height = h * d;
     x.setTransform(d, 0, 0, d, 0, 0);
-    if (reduz) desenha();
   };
   const desenha = () => {
-    x.clearRect(0, 0, w, h); x.lineWidth = 1;
+    x.clearRect(0, 0, w, h);
+    x.lineWidth = w < 700 ? 1.5 : 1;            // um pouco mais grossa no celular
     for (let i = 0; i < 5; i++) {               // 5 linhas ondulando devagar
-      x.strokeStyle = `rgba(184,91,56,${.1 + i * .02})`;
+      x.strokeStyle = `rgba(184,91,56,${.14 + i * .02})`;
       x.beginPath();
       for (let px = 0; px <= w; px += 12) {
-        const y = h * (.15 + i * .18) + Math.sin(px / (220 + i * 40) + t * (.5 + i * .12) + i * 2) * (28 + i * 8);
+        const y = h * (.15 + i * .18) + Math.sin(px / (220 + i * 40) + t * (.5 + i * .12) + i * 2) * (28 + i * 8) * (suave ? .5 : 1);
         px ? x.lineTo(px, y) : x.moveTo(px, y);
       }
       x.stroke();
     }
-    t += .008;
-    if (!reduz) requestAnimationFrame(desenha);
+    t += suave ? .002 : .008;
+    requestAnimationFrame(desenha);
   };
-  ajusta(); addEventListener('resize', ajusta);
-  if (!reduz) desenha();
+  ajusta();
+  // A barra de endereço do Android muda a altura ao rolar: só recalcula se a largura mudar
+  addEventListener('resize', () => { if (innerWidth !== w) ajusta(); });
+  desenha();
 }
 
-mostrar(emAdmin); renderSite(); renderHoras(); fundo();
+mostrar(emAdmin); renderSite(); renderHoras(); fundo(); carregarPublico();
