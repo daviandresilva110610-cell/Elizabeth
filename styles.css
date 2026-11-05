@@ -1,118 +1,396 @@
-/* ===== Variáveis: troque as cores aqui ===== */
-:root{
-  --terra:#B85B38; --terra-esc:#9C4A2C;
-  --bege:#F5F2ED; --bege-2:#EAE5DC;
-  --grafite:#2A2A2A; --suave:#6B655D; --linha:#D9D2C6;
-  --serif:'Cormorant Garamond',Georgia,serif;
-  --sans:'Plus Jakarta Sans',system-ui,sans-serif;
-}
-*{box-sizing:border-box;margin:0}
-[hidden]{display:none!important}
-html{scroll-padding-top:5rem}
-@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
-body{font:400 1rem/1.65 var(--sans);color:var(--grafite);background:var(--bege)}
-a{color:inherit}
-h1,h2,h3,.brand{font-family:var(--serif);font-weight:600;line-height:1.1}
-h2{font-size:2.2rem;margin-bottom:1.5rem}
-h3{font-size:1.35rem}
-:focus-visible{outline:2px solid var(--terra);outline-offset:3px}
+/* =====================================================
+   Elizabeth – Podologia e Pedicure
+   Firebase (Firestore + Authentication), horários únicos e painel.
+   ===================================================== */
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js';
+import { initializeFirestore, collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, writeBatch }
+  from 'https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js';
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+  from 'https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js';
 
-/* Cabeçalho */
-.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:1rem;
-  padding:1rem clamp(1rem,5vw,3rem);background:var(--bege);border-bottom:1px solid var(--linha)}
-.brand{font-size:1.9rem;text-decoration:none}
-.top nav{display:flex;gap:1.75rem;font-size:.95rem}
-.top nav a{text-decoration:none;color:var(--suave)}
-.top nav a:hover{color:var(--terra)}
+/* ---------- Configurações ---------- */
+const firebaseConfig = {
+  apiKey: "AIzaSyAH7FApR5PuDBH6g3Bo-iVAOdfLeWmbkeI",
+  authDomain: "elizabeth-site.firebaseapp.com",
+  projectId: "elizabeth-site",
+  storageBucket: "elizabeth-site.firebasestorage.app",
+  messagingSenderId: "650068318828",
+  appId: "1:650068318828:web:3b09d1dc7a2f52a3e65649"
+};
+const WHATS_ESTUDIO = '5511900000000'; // WhatsApp do estúdio: 55 + DDD + número
+const HORAS = ['09:00','10:00','11:00','13:00','14:00','15:00','16:00','17:00'];
+const seedServ = [
+  {nome:'Podologia clínica', desc:'Avaliação completa e cuidado de calos, durezas e unhas.', dur:'60 min', preco:150},
+  {nome:'Pedicure completa', desc:'Cutilagem, esfoliação, hidratação e esmaltação.', dur:'50 min', preco:80},
+  {nome:'Unha encravada', desc:'Tratamento da causa e orientação para evitar que volte.', dur:'45 min', preco:120},
+  {nome:'Spa dos pés', desc:'Escalda-pés, esfoliação e massagem relaxante.', dur:'40 min', preco:90},
+];
 
-/* Botões */
-.btn{display:inline-block;font:500 1rem var(--sans);padding:.85rem 1.6rem;border:1px solid var(--terra);
-  background:var(--terra);color:#fff;text-decoration:none;cursor:pointer;border-radius:2px}
-.btn:hover{background:var(--terra-esc);border-color:var(--terra-esc)}
-.btn.small{padding:.5rem 1rem;font-size:.9rem}
-.btn.ghost{background:transparent;color:var(--terra)}
-.btn.ghost:hover{background:var(--bege-2)}
-.btn:disabled{opacity:.45;cursor:default}
+const app = initializeApp(firebaseConfig);
+// Detecta sozinho aparelhos/redes que bloqueiam a conexão em tempo real
+const db = initializeFirestore(app, {experimentalAutoDetectLongPolling: true}), auth = getAuth(app);
 
-/* Seções */
-.hero{padding:clamp(4rem,12vw,9rem) clamp(1rem,5vw,3rem);max-width:60rem}
-.hero h1{font-size:clamp(2.8rem,8vw,5.6rem);margin-bottom:1.5rem}
-.hero p{max-width:34rem;color:var(--suave);font-size:1.15rem;margin-bottom:2rem}
-.bloco{max-width:52rem;margin:0 auto;padding:4rem clamp(1rem,5vw,3rem)}
-
-/* Catálogo */
-.servicos,.linhas{list-style:none;padding:0}
-.servicos li,.linhas li{display:flex;justify-content:space-between;align-items:baseline;gap:1.5rem;
-  padding:1.25rem 0;border-top:1px solid var(--linha)}
-.servicos li:last-child,.linhas li:last-child{border-bottom:1px solid var(--linha)}
-.servicos p{color:var(--suave);max-width:30rem}
-.meta{display:flex;flex-direction:column;align-items:flex-end;white-space:nowrap;color:var(--suave);font-size:.9rem}
-.meta strong{color:var(--grafite);font-size:1.1rem}
-.vazio{color:var(--suave)}
-
-/* Formulários */
-.form{display:grid;gap:1.1rem;max-width:30rem}
-.form+h2,.linhas+h2,.linhas+.form{margin-top:3rem}
-label{display:grid;gap:.35rem;font-size:.9rem;color:var(--suave)}
-input,select{font:inherit;color:var(--grafite);padding:.75rem .85rem;background:#fff;border:1px solid var(--linha);border-radius:2px}
-.duas{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
-.erro{color:#A33A1E;font-size:.9rem;min-height:1.2em}
-.ok{max-width:30rem;padding:1.75rem;background:var(--bege-2);border-left:3px solid var(--terra)}
-.ok p{margin:.5rem 0 1.25rem}
-
-/* Rodapé */
-.rodape{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:2rem;
-  padding:3rem clamp(1rem,5vw,3rem);background:var(--bege-2);color:var(--suave)}
-.rodape h3{color:var(--grafite);margin-bottom:.5rem}
-.discreto{background:none;border:0;font:.8rem var(--sans);color:var(--suave);text-decoration:underline;cursor:pointer}
-
-/* Painel */
-.linhas li{flex-wrap:wrap;align-items:center}
-.linhas h3{font-size:1.2rem}
-.linhas p{font-size:.9rem;color:var(--suave)}
-.acoes{display:flex;flex-wrap:wrap;gap:.5rem}
-.tag{font-size:.8rem;padding:.2rem .7rem;border-radius:99px;background:var(--bege-2)}
-.tag.confirmado{background:var(--terra);color:#fff}
-
-@media (max-width:640px){
-  .top nav{display:none}
-  .servicos li{flex-direction:column;gap:.5rem}
-  .meta{align-items:flex-start;flex-direction:row;gap:.75rem}
+/* ---------- Utilitários ---------- */
+const $ = s => document.querySelector(s);
+const brl = n => Number(n).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+const dataBR = d => d.split('-').reverse().join('/');
+const falha = e => alert('Não foi possível concluir (' + (e.code || e.message) + ').');
+const el = (tag, cls, txt) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (txt !== undefined) e.textContent = txt;
+  return e;
+};
+// Valor da opção marcada (radio) de um grupo
+const marcado = n => ($(`#form-agenda input[name="${n}"]:checked`) || {}).value || '';
+// Opção clicável (serviço ou horário)
+function opcao(name, value, titulo, detalhe, on, off) {
+  const l = el('label', 'op'), i = document.createElement('input'), s = el('span');
+  i.type = 'radio'; i.name = name; i.value = value; i.checked = !!on; i.disabled = !!off;
+  s.append(el('strong', '', titulo));
+  if (detalhe) s.append(el('small', '', detalhe));
+  l.append(i, s);
+  return l;
 }
 
-/* ===== Fundo animado (linhas sutis) ===== */
-#fundo{position:fixed;top:0;left:0;width:100%;height:100%;z-index:-1;pointer-events:none}
+/* ---------- Estado ---------- */
+const CACHE = 'eliz_servicos_cache';
+let servicos = [], ags = [], ocupados = new Set(), usuario = null, authPronto = false, cancelaAgs = null;
+let msgServ = 'Carregando serviços…';
+let emAdmin = location.hash === '#painel';   // lembra o painel ao recarregar a página
+// Mostra os últimos serviços salvos no aparelho enquanto a internet responde
+try { const c = JSON.parse(localStorage.getItem(CACHE)); if (Array.isArray(c)) servicos = c; } catch (e) {}
 
-/* ===== Animações simples ===== */
-.rev{opacity:0;transform:translateY(18px);transition:opacity .8s ease,transform .8s ease}
-.rev:nth-child(2){transition-delay:.1s}.rev:nth-child(3){transition-delay:.2s}
-.rev.visto{opacity:1;transform:none}
-.btn{transition:transform .2s,background .2s,border-color .2s}
-.btn:hover:not(:disabled){transform:translateY(-2px)}
-.servicos li{transition:padding-left .3s}
-.servicos li:hover{padding-left:.6rem}
-/* "Reduzir movimento" (ex.: Android sem animações): mantém só o aparecer suave, sem deslocamentos */
-@media (prefers-reduced-motion:reduce){.rev{transform:none}.btn:hover:not(:disabled){transform:none}.servicos li:hover{padding-left:0}}
-/* Resposta ao toque no celular */
-.btn:active:not(:disabled){transform:scale(.97)}
-.op:active span{border-color:var(--terra)}
-.servicos li:active{padding-left:.6rem}
+/* ---------- Site público ---------- */
+function renderSite() {
+  const ul = $('#lista-servicos'), box = $('#f-servico'), atual = marcado('servico');
+  ul.replaceChildren(); box.replaceChildren();
+  if (!servicos.length) {
+    ul.append(el('li', 'vazio', msgServ));
+    box.append(el('p', 'dica', msgServ));
+  }
+  servicos.forEach(s => {
+    const li = el('li'), txt = el('div'), meta = el('div', 'meta');
+    txt.append(el('h3', '', s.nome), el('p', '', s.desc));
+    meta.append(el('span', '', s.dur), el('strong', '', brl(s.preco)));
+    li.append(txt, meta);
+    ul.append(li);
+    box.append(opcao('servico', s.id, s.nome, `${s.dur} · ${brl(s.preco)}`, s.id === atual));
+  });
+}
 
-/* ===== Opções clicáveis (serviços e horários) ===== */
-fieldset{border:0;padding:0;min-width:0}
-legend{font-size:.9rem;color:var(--suave);margin-bottom:.5rem;padding:0}
-.opcoes{display:grid;gap:.6rem}
-.chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(5rem,1fr));gap:.5rem}
-.op{display:block;position:relative;cursor:pointer;font-size:1rem;color:var(--grafite)}
-.op input{position:absolute;opacity:0;width:1px;height:1px}
-.op span{display:flex;justify-content:space-between;gap:1rem;padding:.75rem .9rem;background:#fff;border:1px solid var(--linha);border-radius:2px;transition:border-color .2s,background .2s}
-.op small{color:var(--suave);font-size:.85rem}
-.op:hover span{border-color:var(--terra)}
-.op input:checked+span{border-color:var(--terra);background:var(--bege-2);box-shadow:inset 0 0 0 1px var(--terra)}
-.op input:focus-visible+span{outline:2px solid var(--terra);outline-offset:2px}
-.op input:disabled+span{opacity:.4;text-decoration:line-through;cursor:not-allowed}
-.chips .op span{justify-content:center}
-.dica{font-size:.85rem;color:var(--suave)}
+// Horários da data escolhida; os já reservados (ou que já passaram hoje) ficam desativados
+function renderHoras() {
+  const box = $('#f-hora'), data = $('#f-data').value, atual = marcado('hora');
+  box.replaceChildren();
+  $('#dica-hora').hidden = !!data;
+  if (!data) return;
+  const hoje = $('#f-data').min, agora = new Date().toTimeString().slice(0, 5);
+  HORAS.forEach(h => {
+    const off = ocupados.has(`${data}_${h}`) || (data === hoje && h <= agora);
+    box.append(opcao('hora', h, h, '', h === atual && !off, off));
+  });
+}
 
-/* Campo de data ocupa a largura toda também no Android */
-input[type=date]{width:100%;min-width:0;min-height:3rem;display:block;-webkit-appearance:none;appearance:none}
+/* Leitura e reserva pelo endereço REST do Firestore (fetch comum).
+   Funciona em celulares/redes que bloqueiam a conexão em tempo real do SDK.
+   Atualiza sozinho a cada 20 s (e ao voltar para a aba). */
+const RAIZ = `projects/${firebaseConfig.projectId}/databases/(default)/documents`;
+const API = `https://firestore.googleapis.com/v1/${RAIZ}`, KEY = `key=${firebaseConfig.apiKey}`;
+const str = v => ({stringValue: v});
+async function pedir(url, corpo) {
+  const ac = new AbortController(), t = setTimeout(() => ac.abort(), 12000);   // desiste em 12 s
+  try {
+    const r = await fetch(url, {signal: ac.signal, ...(corpo && {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(corpo)})});
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error('http'), {status: r.status});
+    return j;
+  } finally { clearTimeout(t); }
+}
+const valor = f => 'stringValue' in f ? f.stringValue : 'integerValue' in f ? Number(f.integerValue) : 'doubleValue' in f ? f.doubleValue : '';
+async function listar(col) {
+  let docs = [], pg = '';
+  do {
+    const j = await pedir(`${API}/${col}?pageSize=300${pg}&${KEY}`);
+    docs.push(...(j.documents || []));
+    pg = j.nextPageToken ? '&pageToken=' + encodeURIComponent(j.nextPageToken) : '';
+  } while (pg);
+  return docs.map(d => { const o = {id: d.name.split('/').pop()}; for (const k in d.fields || {}) o[k] = valor(d.fields[k]); return o; });
+}
+let timer, assinatura = '';
+async function carregarPublico() {
+  clearTimeout(timer);
+  let ok = true;
+  try {
+    const [sv, hs] = await Promise.all([listar('servicos'), listar('horarios')]);
+    servicos = sv.sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+    ocupados = new Set(hs.map(d => d.id));
+    msgServ = 'Novos serviços em breve.';
+    try { localStorage.setItem(CACHE, JSON.stringify(servicos)); } catch (e) {}
+  } catch (e) {
+    ok = false;
+    if (!servicos.length) msgServ = 'Não foi possível carregar os serviços. Tentando de novo…';
+  }
+  const nova = JSON.stringify([servicos, [...ocupados], msgServ]);
+  if (nova !== assinatura) { assinatura = nova; renderSite(); renderHoras(); renderAdmin(); }   // só redesenha se mudou
+  timer = setTimeout(carregarPublico, ok ? 20000 : 5000);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) carregarPublico(); });
+
+/* ---------- Cancelamento pelo cliente ----------
+   Cada pedido tem um código longo e impossível de adivinhar (o próprio id).
+   Só quem tem o link (?cancelar=codigo) consegue ver e cancelar aquele pedido. */
+const idCancelar = new URLSearchParams(location.search).get('cancelar');
+const linkCancelar = id => `${location.origin}${location.pathname}?cancelar=${id}`;
+const novoId = () => {
+  try { return [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join(''); }
+  catch (e) { return Date.now().toString(36) + Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 12); }
+};
+async function lerAg(id) {
+  const j = await pedir(`${API}/agendamentos/${encodeURIComponent(id)}?${KEY}`), a = {};
+  for (const k in j.fields || {}) a[k] = valor(j.fields[k]);
+  return a;
+}
+
+// Página de cancelamento (aberta pelo link)
+async function abrirCancelar(id) {
+  document.body.classList.add('modo-cancelar');
+  $('#cancelar').hidden = false;
+  const info = $('#cancelar-info'), btn = $('#cancelar-btn'), msg = $('#cancelar-msg');
+  try {
+    const a = await lerAg(id);
+    info.textContent = `${a.servicoNome} · ${dataBR(a.data)} às ${a.hora} · ${a.nome}`;
+    if (a.status === 'cancelado') { msg.textContent = 'Este agendamento já foi cancelado.'; return; }
+    btn.hidden = false;
+    btn.onclick = async () => {
+      if (!confirm('Cancelar este agendamento?')) return;
+      btn.disabled = true; msg.textContent = '';
+      const marca = {update: {name: `${RAIZ}/agendamentos/${id}`, fields: {status: str('cancelado')}},
+                     updateMask: {fieldPaths: ['status']}, currentDocument: {exists: true}};
+      let liberou = true;
+      try {
+        try { await pedir(`${API}:commit?${KEY}`, {writes: [marca, {delete: `${RAIZ}/horarios/${a.slot}`}]}); }
+        catch (e) {   // pedidos antigos: só marca como cancelado (a Elizabeth libera o horário no painel)
+          if (!e.status) throw e;
+          liberou = false;
+          await pedir(`${API}:commit?${KEY}`, {writes: [marca]});
+        }
+        btn.hidden = true;
+        msg.textContent = liberou ? 'Agendamento cancelado. O horário foi liberado.' : 'Agendamento cancelado. A Elizabeth foi avisada.';
+        try { if (localStorage.getItem('eliz_meu') === id) localStorage.removeItem('eliz_meu'); } catch (e) {}
+      } catch (e) {
+        btn.disabled = false;
+        msg.textContent = 'Não foi possível cancelar agora. Tente de novo ou chame no WhatsApp.';
+      }
+    };
+  } catch (e) {
+    info.textContent = e.status === 404 || e.status === 403
+      ? 'Não encontramos este agendamento. Confira o link ou chame no WhatsApp.'
+      : 'Não foi possível carregar agora. Tente de novo em instantes.';
+  }
+}
+
+// Quem volta ao site no mesmo aparelho vê o próprio agendamento, com atalho para cancelar
+async function lembrarMeu() {
+  let id; try { id = localStorage.getItem('eliz_meu'); } catch (e) {}
+  if (!id) return;
+  try {
+    const a = await lerAg(id);
+    if (a.status === 'cancelado' || a.data < $('#f-data').min) return;
+    $('#meu-txt').textContent = `${a.servicoNome} · ${dataBR(a.data)} às ${a.hora}`;
+    $('#meu-link').href = linkCancelar(id);
+    $('#meu').hidden = false;
+  } catch (e) {}
+}
+
+$('#f-data').min = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+$('#f-data').addEventListener('input', renderHoras);
+$('#f-data').addEventListener('change', renderHoras);
+$('#link-whats').href = 'https://wa.me/' + WHATS_ESTUDIO;
+
+// Máscara (00) 00000-0000
+$('#f-whats').addEventListener('input', e => {
+  const d = e.target.value.replace(/\D/g, '').slice(0, 11);
+  e.target.value = d.length > 6 ? `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`
+                 : d.length > 2 ? `(${d.slice(0,2)}) ${d.slice(2)}` : d;
+});
+
+$('#form-agenda').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = e.target, v = n => f.elements[n].value.trim(), btn = f.querySelector('button[type=submit]');
+  const serv = servicos.find(s => s.id === marcado('servico')), hora = marcado('hora'), data = v('data');
+  if (v('nome').length < 3 || v('whats').replace(/\D/g, '').length !== 11 || !serv || !data || data < $('#f-data').min || !hora) {
+    $('#erro').textContent = 'Preencha tudo: nome, WhatsApp completo, serviço, data e horário.';
+    return;
+  }
+  $('#erro').textContent = '';
+  btn.disabled = true;
+  const slot = `${data}_${hora}`, base = RAIZ + '/';
+  const id = novoId();
+  try {
+    // Pedido + reserva do horário num único envio (tudo ou nada). O horário tem código único:
+    // se outra pessoa reservou antes, o Firebase recusa (exists:false) e ninguém fica duplicado.
+    await pedir(`${API}:commit?${KEY}`, {writes: [
+      {update: {name: `${base}agendamentos/${id}`, fields: {
+        nome: str(v('nome')), whats: str(v('whats')), servicoId: str(serv.id), servicoNome: str(serv.nome),
+        data: str(data), hora: str(hora), slot: str(slot), status: str('pendente'),
+        criado: {timestampValue: new Date().toISOString()}}}, currentDocument: {exists: false}},
+      {update: {name: `${base}horarios/${slot}`, fields: {data: str(data), hora: str(hora), ag: str(id)}}, currentDocument: {exists: false}},
+    ]});
+    ocupados.add(slot);
+    $('#ok-link').href = linkCancelar(id);
+    try { localStorage.setItem('eliz_meu', id); } catch (e) {}
+    f.reset(); renderHoras(); f.hidden = true; $('#ok').hidden = false;
+  } catch (err) {
+    $('#erro').textContent = err.status
+      ? 'Não foi possível reservar este horário. Ele pode ter acabado de ser ocupado: escolha outro ou chame no WhatsApp.'
+      : 'Não foi possível enviar agora. Verifique a internet e tente de novo, ou chame no WhatsApp.';
+    carregarPublico();
+  }
+  btn.disabled = false;
+});
+$('#novo').addEventListener('click', () => { $('#ok').hidden = true; $('#form-agenda').hidden = false; });
+
+/* ---------- Painel da empresa ---------- */
+function renderAdmin() {
+  if (!emAdmin || !usuario) return;
+  const lista = $('#lista-ag');
+  lista.replaceChildren();
+  if (!ags.length) lista.append(el('li', 'vazio', 'Nenhuma solicitação por enquanto.'));
+  [...ags].sort((a, b) => (a.data + a.hora).localeCompare(b.data + b.hora)).forEach(a => {
+    const li = el('li'), info = el('div'), acoes = el('div', 'acoes');
+    info.append(el('h3', '', a.nome), el('p', '', `${a.servicoNome} · ${dataBR(a.data)} às ${a.hora}`), el('p', '', a.whats));
+
+    const conf = el('button', 'btn small', 'Confirmar');
+    conf.disabled = a.status !== 'pendente';
+    conf.onclick = () => updateDoc(doc(db, 'agendamentos', a.id), {status:'confirmado'}).catch(falha);
+
+    const msg = `Olá, ${a.nome.split(' ')[0]}! Seu horário (${a.servicoNome}) no estúdio Elizabeth está confirmado para ${dataBR(a.data)} às ${a.hora}. Até lá! Para consultar ou cancelar: ${linkCancelar(a.id)}`;
+    const wpp = el('a', 'btn small ghost', 'WhatsApp');
+    wpp.href = `https://wa.me/55${a.whats.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+    wpp.target = '_blank'; wpp.rel = 'noopener';
+
+    const canc = el('button', 'btn small ghost', a.status === 'cancelado' ? 'Remover' : 'Cancelar');
+    canc.onclick = () => {
+      if (!confirm(`Cancelar o agendamento de ${a.nome}?`)) return;
+      const b = writeBatch(db);                       // apaga o pedido e libera o horário
+      b.delete(doc(db, 'agendamentos', a.id));
+      if (a.slot) b.delete(doc(db, 'horarios', a.slot));
+      b.commit().then(carregarPublico).catch(falha);
+    };
+
+    acoes.append(...(a.status === 'cancelado' ? [canc] : [conf, wpp, canc]));
+    li.append(info, el('span', 'tag ' + a.status, a.status === 'confirmado' ? 'Confirmado' : a.status === 'cancelado' ? 'Cancelado pelo cliente' : 'Pendente'), acoes);
+    lista.append(li);
+  });
+
+  const ls = $('#lista-serv-adm');
+  ls.replaceChildren();
+  if (!servicos.length) {
+    const li = el('li'), b = el('button', 'btn small ghost', 'Carregar serviços de exemplo');
+    b.onclick = () => Promise.all(seedServ.map((s, i) =>
+      addDoc(collection(db, 'servicos'), {...s, ordem: Date.now() + i}))).then(carregarPublico).catch(falha);
+    li.append(el('span', 'vazio', 'Nenhum serviço cadastrado.'), b);
+    ls.append(li);
+  }
+  servicos.forEach(s => {
+    const li = el('li'), del = el('button', 'btn small ghost', 'Excluir');
+    del.onclick = () => {
+      if (confirm(`Excluir o serviço "${s.nome}"?`)) deleteDoc(doc(db, 'servicos', s.id)).then(carregarPublico).catch(falha);
+    };
+    li.append(el('span', '', `${s.nome} · ${s.dur} · ${brl(s.preco)}`), del);
+    ls.append(li);
+  });
+}
+
+$('#form-serv').addEventListener('submit', e => {
+  e.preventDefault();
+  const f = e.target, v = n => f.elements[n].value.trim();
+  const preco = parseFloat(v('preco').replace(',', '.'));
+  if (!v('nome') || !v('dur') || !(preco >= 0)) return;
+  addDoc(collection(db, 'servicos'), {nome:v('nome'), desc:v('desc'), dur:v('dur'), preco, ordem:Date.now()})
+    .then(() => { f.reset(); carregarPublico(); }).catch(falha);
+});
+
+/* ---------- Login e navegação site <-> painel ---------- */
+function mostrar(admin) {
+  if (admin !== emAdmin) window.scrollTo(0, 0);
+  emAdmin = admin;
+  // O endereço guarda "#painel": ao recarregar, a página continua no painel
+  if (admin) history.replaceState(null, '', '#painel');
+  else if (location.hash === '#painel') history.replaceState(null, '', location.pathname + location.search);
+  $('#site').hidden = admin;
+  $('#admin').hidden = !admin;
+  $('#form-login').hidden = !authPronto || !!usuario;   // espera o Firebase dizer se já há login
+  $('#painel').hidden = !usuario;
+  $('#sair').hidden = !usuario;
+  renderAdmin();
+}
+$('#abrir-admin').onclick = () => mostrar(true);
+$('#voltar').onclick = () => mostrar(false);
+$('#sair').onclick = () => { signOut(auth); mostrar(false); };
+addEventListener('hashchange', () => { const q = location.hash === '#painel'; if (q !== emAdmin) mostrar(q); });
+$('#form-login').addEventListener('submit', e => {
+  e.preventDefault();
+  signInWithEmailAndPassword(auth, $('#email').value.trim(), $('#senha').value)
+    .then(() => { $('#senha').value = ''; $('#login-erro').textContent = ''; })
+    .catch(() => { $('#login-erro').textContent = 'E-mail ou senha incorretos.'; });
+});
+
+// Só com a equipe logada o site lê os agendamentos
+onAuthStateChanged(auth, u => {
+  usuario = u; authPronto = true;
+  if (cancelaAgs) { cancelaAgs(); cancelaAgs = null; }
+  if (u) {
+    cancelaAgs = onSnapshot(collection(db, 'agendamentos'), snap => {
+      ags = snap.docs.map(d => ({id:d.id, ...d.data()}));
+      renderAdmin();
+    }, falha);
+  } else ags = [];
+  mostrar(emAdmin);
+});
+
+/* ---------- Visual: entrada suave e fundo com linhas ---------- */
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(es => es.forEach(e => {
+    if (e.isIntersecting) { e.target.classList.add('visto'); io.unobserve(e.target); }
+  }), {rootMargin: '0px'});   // sem margem negativa: itens colados no fim da página também aparecem
+  // o rodapé não anima, para o botão do painel nunca sumir
+  document.querySelectorAll('.hero>*,.bloco>*').forEach(n => { n.classList.add('rev'); io.observe(n); });
+}
+
+function fundo() {
+  const c = $('#fundo'), x = c.getContext && c.getContext('2d');
+  if (!x) return;
+  // Se o aparelho pede "reduzir movimento" (comum no Android com economia de bateria
+  // ou "Remover animações"), as linhas ficam mais lentas e suaves, em vez de desligar.
+  const suave = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  let w, h, t = 0;
+  const ajusta = () => {
+    const d = Math.min(devicePixelRatio || 1, 2);
+    w = innerWidth; h = innerHeight; c.width = w * d; c.height = h * d;
+    x.setTransform(d, 0, 0, d, 0, 0);
+  };
+  const desenha = () => {
+    x.clearRect(0, 0, w, h);
+    x.lineWidth = w < 700 ? 1.5 : 1;            // um pouco mais grossa no celular
+    for (let i = 0; i < 5; i++) {               // 5 linhas ondulando devagar
+      x.strokeStyle = `rgba(184,91,56,${.14 + i * .02})`;
+      x.beginPath();
+      for (let px = 0; px <= w; px += 12) {
+        const y = h * (.15 + i * .18) + Math.sin(px / (220 + i * 40) + t * (.5 + i * .12) + i * 2) * (28 + i * 8) * (suave ? .5 : 1);
+        px ? x.lineTo(px, y) : x.moveTo(px, y);
+      }
+      x.stroke();
+    }
+    t += suave ? .002 : .008;
+    requestAnimationFrame(desenha);
+  };
+  ajusta();
+  // A barra de endereço do Android muda a altura ao rolar: só recalcula se a largura mudar
+  addEventListener('resize', () => { if (innerWidth !== w) ajusta(); });
+  desenha();
+}
+
+mostrar(emAdmin); renderSite(); renderHoras(); fundo(); carregarPublico();
+if (idCancelar) abrirCancelar(idCancelar); else lembrarMeu();
