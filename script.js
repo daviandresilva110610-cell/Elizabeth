@@ -137,6 +137,72 @@ async function carregarPublico() {
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) carregarPublico(); });
 
+/* ---------- Cancelamento pelo cliente ----------
+   Cada pedido tem um código longo e impossível de adivinhar (o próprio id).
+   Só quem tem o link (?cancelar=codigo) consegue ver e cancelar aquele pedido. */
+const idCancelar = new URLSearchParams(location.search).get('cancelar');
+const linkCancelar = id => `${location.origin}${location.pathname}?cancelar=${id}`;
+const novoId = () => {
+  try { return [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join(''); }
+  catch (e) { return Date.now().toString(36) + Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 12); }
+};
+async function lerAg(id) {
+  const j = await pedir(`${API}/agendamentos/${encodeURIComponent(id)}?${KEY}`), a = {};
+  for (const k in j.fields || {}) a[k] = valor(j.fields[k]);
+  return a;
+}
+
+// Página de cancelamento (aberta pelo link)
+async function abrirCancelar(id) {
+  document.body.classList.add('modo-cancelar');
+  $('#cancelar').hidden = false;
+  const info = $('#cancelar-info'), btn = $('#cancelar-btn'), msg = $('#cancelar-msg');
+  try {
+    const a = await lerAg(id);
+    info.textContent = `${a.servicoNome} · ${dataBR(a.data)} às ${a.hora} · ${a.nome}`;
+    if (a.status === 'cancelado') { msg.textContent = 'Este agendamento já foi cancelado.'; return; }
+    btn.hidden = false;
+    btn.onclick = async () => {
+      if (!confirm('Cancelar este agendamento?')) return;
+      btn.disabled = true; msg.textContent = '';
+      const marca = {update: {name: `${RAIZ}/agendamentos/${id}`, fields: {status: str('cancelado')}},
+                     updateMask: {fieldPaths: ['status']}, currentDocument: {exists: true}};
+      let liberou = true;
+      try {
+        try { await pedir(`${API}:commit?${KEY}`, {writes: [marca, {delete: `${RAIZ}/horarios/${a.slot}`}]}); }
+        catch (e) {   // pedidos antigos: só marca como cancelado (a Elizabeth libera o horário no painel)
+          if (!e.status) throw e;
+          liberou = false;
+          await pedir(`${API}:commit?${KEY}`, {writes: [marca]});
+        }
+        btn.hidden = true;
+        msg.textContent = liberou ? 'Agendamento cancelado. O horário foi liberado.' : 'Agendamento cancelado. A Elizabeth foi avisada.';
+        try { if (localStorage.getItem('eliz_meu') === id) localStorage.removeItem('eliz_meu'); } catch (e) {}
+      } catch (e) {
+        btn.disabled = false;
+        msg.textContent = 'Não foi possível cancelar agora. Tente de novo ou chame no WhatsApp.';
+      }
+    };
+  } catch (e) {
+    info.textContent = e.status === 404 || e.status === 403
+      ? 'Não encontramos este agendamento. Confira o link ou chame no WhatsApp.'
+      : 'Não foi possível carregar agora. Tente de novo em instantes.';
+  }
+}
+
+// Quem volta ao site no mesmo aparelho vê o próprio agendamento, com atalho para cancelar
+async function lembrarMeu() {
+  let id; try { id = localStorage.getItem('eliz_meu'); } catch (e) {}
+  if (!id) return;
+  try {
+    const a = await lerAg(id);
+    if (a.status === 'cancelado' || a.data < $('#f-data').min) return;
+    $('#meu-txt').textContent = `${a.servicoNome} · ${dataBR(a.data)} às ${a.hora}`;
+    $('#meu-link').href = linkCancelar(id);
+    $('#meu').hidden = false;
+  } catch (e) {}
+}
+
 $('#f-data').min = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
 $('#f-data').addEventListener('input', renderHoras);
 $('#f-data').addEventListener('change', renderHoras);
@@ -160,7 +226,7 @@ $('#form-agenda').addEventListener('submit', async e => {
   $('#erro').textContent = '';
   btn.disabled = true;
   const slot = `${data}_${hora}`, base = RAIZ + '/';
-  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const id = novoId();
   try {
     // Pedido + reserva do horário num único envio (tudo ou nada). O horário tem código único:
     // se outra pessoa reservou antes, o Firebase recusa (exists:false) e ninguém fica duplicado.
@@ -169,9 +235,11 @@ $('#form-agenda').addEventListener('submit', async e => {
         nome: str(v('nome')), whats: str(v('whats')), servicoId: str(serv.id), servicoNome: str(serv.nome),
         data: str(data), hora: str(hora), slot: str(slot), status: str('pendente'),
         criado: {timestampValue: new Date().toISOString()}}}, currentDocument: {exists: false}},
-      {update: {name: `${base}horarios/${slot}`, fields: {data: str(data), hora: str(hora)}}, currentDocument: {exists: false}},
+      {update: {name: `${base}horarios/${slot}`, fields: {data: str(data), hora: str(hora), ag: str(id)}}, currentDocument: {exists: false}},
     ]});
     ocupados.add(slot);
+    $('#ok-link').href = linkCancelar(id);
+    try { localStorage.setItem('eliz_meu', id); } catch (e) {}
     f.reset(); renderHoras(); f.hidden = true; $('#ok').hidden = false;
   } catch (err) {
     $('#erro').textContent = err.status
@@ -194,15 +262,15 @@ function renderAdmin() {
     info.append(el('h3', '', a.nome), el('p', '', `${a.servicoNome} · ${dataBR(a.data)} às ${a.hora}`), el('p', '', a.whats));
 
     const conf = el('button', 'btn small', 'Confirmar');
-    conf.disabled = a.status === 'confirmado';
+    conf.disabled = a.status !== 'pendente';
     conf.onclick = () => updateDoc(doc(db, 'agendamentos', a.id), {status:'confirmado'}).catch(falha);
 
-    const msg = `Olá, ${a.nome.split(' ')[0]}! Seu horário (${a.servicoNome}) no estúdio Elizabeth está confirmado para ${dataBR(a.data)} às ${a.hora}. Até lá!`;
+    const msg = `Olá, ${a.nome.split(' ')[0]}! Seu horário (${a.servicoNome}) no estúdio Elizabeth está confirmado para ${dataBR(a.data)} às ${a.hora}. Até lá! Para consultar ou cancelar: ${linkCancelar(a.id)}`;
     const wpp = el('a', 'btn small ghost', 'WhatsApp');
     wpp.href = `https://wa.me/55${a.whats.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
     wpp.target = '_blank'; wpp.rel = 'noopener';
 
-    const canc = el('button', 'btn small ghost', 'Cancelar');
+    const canc = el('button', 'btn small ghost', a.status === 'cancelado' ? 'Remover' : 'Cancelar');
     canc.onclick = () => {
       if (!confirm(`Cancelar o agendamento de ${a.nome}?`)) return;
       const b = writeBatch(db);                       // apaga o pedido e libera o horário
@@ -211,8 +279,8 @@ function renderAdmin() {
       b.commit().then(carregarPublico).catch(falha);
     };
 
-    acoes.append(conf, wpp, canc);
-    li.append(info, el('span', 'tag ' + a.status, a.status === 'confirmado' ? 'Confirmado' : 'Pendente'), acoes);
+    acoes.append(...(a.status === 'cancelado' ? [canc] : [conf, wpp, canc]));
+    li.append(info, el('span', 'tag ' + a.status, a.status === 'confirmado' ? 'Confirmado' : a.status === 'cancelado' ? 'Cancelado pelo cliente' : 'Pendente'), acoes);
     lista.append(li);
   });
 
@@ -286,8 +354,9 @@ onAuthStateChanged(auth, u => {
 if ('IntersectionObserver' in window) {
   const io = new IntersectionObserver(es => es.forEach(e => {
     if (e.isIntersecting) { e.target.classList.add('visto'); io.unobserve(e.target); }
-  }), {rootMargin: '0px 0px -8% 0px'});
-  document.querySelectorAll('.hero>*,.bloco>*,.rodape>*').forEach(n => { n.classList.add('rev'); io.observe(n); });
+  }), {rootMargin: '0px'});   // sem margem negativa: itens colados no fim da página também aparecem
+  // o rodapé não anima, para o botão do painel nunca sumir
+  document.querySelectorAll('.hero>*,.bloco>*').forEach(n => { n.classList.add('rev'); io.observe(n); });
 }
 
 function fundo() {
@@ -324,3 +393,4 @@ function fundo() {
 }
 
 mostrar(emAdmin); renderSite(); renderHoras(); fundo(); carregarPublico();
+if (idCancelar) abrirCancelar(idCancelar); else lembrarMeu();
