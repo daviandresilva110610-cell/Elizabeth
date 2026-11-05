@@ -81,7 +81,7 @@ input,select{font:inherit;color:var(--grafite);padding:.75rem .85rem;background:
 }
 
 /* ===== Fundo animado (linhas sutis) ===== */
-#fundo{position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
+#fundo{position:fixed;top:0;left:0;width:100%;height:100%;z-index:-1;pointer-events:none}
 
 /* ===== Animações simples ===== */
 .rev{opacity:0;transform:translateY(18px);transition:opacity .8s ease,transform .8s ease}
@@ -91,7 +91,12 @@ input,select{font:inherit;color:var(--grafite);padding:.75rem .85rem;background:
 .btn:hover:not(:disabled){transform:translateY(-2px)}
 .servicos li{transition:padding-left .3s}
 .servicos li:hover{padding-left:.6rem}
-@media (prefers-reduced-motion:reduce){.rev{opacity:1;transform:none;transition:none}.btn,.servicos li{transition:none}}
+/* "Reduzir movimento" (ex.: Android sem animações): mantém só o aparecer suave, sem deslocamentos */
+@media (prefers-reduced-motion:reduce){.rev{transform:none}.btn:hover:not(:disabled){transform:none}.servicos li:hover{padding-left:0}}
+/* Resposta ao toque no celular */
+.btn:active:not(:disabled){transform:scale(.97)}
+.op:active span{border-color:var(--terra)}
+.servicos li:active{padding-left:.6rem}
 
 /* ===== Opções clicáveis (serviços e horários) ===== */
 fieldset{border:0;padding:0;min-width:0}
@@ -108,3 +113,6 @@ legend{font-size:.9rem;color:var(--suave);margin-bottom:.5rem;padding:0}
 .op input:disabled+span{opacity:.4;text-decoration:line-through;cursor:not-allowed}
 .chips .op span{justify-content:center}
 .dica{font-size:.85rem;color:var(--suave)}
+
+/* Campo de data ocupa a largura toda também no Android */
+input[type=date]{width:100%;min-width:0;min-height:3rem;display:block;-webkit-appearance:none;appearance:none}
