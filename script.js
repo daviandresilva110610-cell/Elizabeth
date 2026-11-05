@@ -17,7 +17,7 @@ const firebaseConfig = {
   messagingSenderId: "650068318828",
   appId: "1:650068318828:web:3b09d1dc7a2f52a3e65649"
 };
-const WHATS_ESTUDIO = '5511900000000'; // WhatsApp do estúdio: 55 + DDD + número
+const WHATS_ESTUDIO = '5519971533161'; // WhatsApp do estúdio: 55 + DDD + número
 const HORAS = ['09:00','10:00','11:00','13:00','14:00','15:00','16:00','17:00'];
 const seedServ = [
   {nome:'Podologia clínica', desc:'Avaliação completa e cuidado de calos, durezas e unhas.', dur:'60 min', preco:150},
