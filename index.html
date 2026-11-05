@@ -42,6 +42,10 @@
     <!-- Agendamento -->
     <section id="agendar" class="bloco">
       <h2>Agendar</h2>
+      <div id="meu" class="ok" hidden>
+        <p>Seu agendamento: <strong id="meu-txt"></strong></p>
+        <a id="meu-link" class="btn ghost small" href="#">Ver ou cancelar</a>
+      </div>
       <form id="form-agenda" class="form" novalidate>
         <label>Nome completo <input name="nome" autocomplete="name" required></label>
         <label>WhatsApp <input id="f-whats" name="whats" inputmode="numeric" placeholder="(00) 00000-0000" autocomplete="tel-national" required></label>
@@ -54,8 +58,17 @@
       <div id="ok" class="ok" role="status" hidden>
         <h3>Solicitação enviada!</h3>
         <p>Entraremos em contato em breve para confirmar seu horário.</p>
+        <p class="dica">Guarde este link para consultar ou cancelar: <a id="ok-link" href="#">cancelar agendamento</a></p>
         <button id="novo" class="btn ghost small" type="button">Fazer outro agendamento</button>
       </div>
+    </section>
+    <!-- Cancelamento (aberto pelo link ?cancelar=codigo) -->
+    <section id="cancelar" class="bloco" hidden>
+      <h2>Seu agendamento</h2>
+      <p id="cancelar-info"></p>
+      <p id="cancelar-msg" class="dica" role="status"></p>
+      <button id="cancelar-btn" class="btn" type="button" hidden>Cancelar este agendamento</button>
+      <a class="btn ghost small" href="./">Voltar ao site</a>
     </section>
   </main>
 
