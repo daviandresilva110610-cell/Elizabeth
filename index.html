@@ -44,6 +44,8 @@
       <h2>Agendar</h2>
       <div id="meu" class="ok" hidden>
         <p>Seu agendamento: <strong id="meu-txt"></strong></p>
+        <p id="meu-status"></p>
+        <p class="dica">Cancelamento pelo site até 24 horas antes do atendimento.</p>
         <a id="meu-link" class="btn ghost small" href="#">Ver ou cancelar</a>
       </div>
       <form id="form-agenda" class="form" novalidate>
@@ -52,13 +54,19 @@
         <fieldset><legend>Serviço</legend><div id="f-servico" class="opcoes"></div></fieldset>
         <label>Data <input id="f-data" type="date" name="data" required></label>
         <fieldset><legend>Horário</legend><div id="f-hora" class="chips"></div><p id="dica-hora" class="dica">Escolha uma data para ver os horários livres.</p></fieldset>
+        <p class="aviso">Cancelamento: você pode cancelar pelo site até 24 horas antes do atendimento. Depois desse prazo, fale com a Elizabeth pelo WhatsApp.</p>
         <p id="erro" class="erro" role="alert"></p>
         <button class="btn" type="submit">Solicitar horário</button>
       </form>
       <div id="ok" class="ok" role="status" hidden>
         <h3>Solicitação enviada!</h3>
         <p>Entraremos em contato em breve para confirmar seu horário.</p>
-        <p class="dica">Guarde este link para consultar ou cancelar: <a id="ok-link" href="#">cancelar agendamento</a></p>
+        <p class="dica">Guarde este link para consultar ou cancelar (até 24 horas antes do atendimento): <a id="ok-link" href="#">cancelar agendamento</a></p>
+        <div class="acoes">
+          <a id="ok-whats" class="btn small" href="#" target="_blank" rel="noopener">Avisar a Elizabeth no WhatsApp</a>
+          <button id="ativar-aviso-cli" class="btn ghost small" type="button">Receber aviso de confirmação</button>
+        </div>
+        <p class="dica">O aviso aparece com o site aberto no navegador. A Elizabeth também confirma pelo WhatsApp.</p>
         <button id="novo" class="btn ghost small" type="button">Fazer outro agendamento</button>
       </div>
     </section>
@@ -66,8 +74,10 @@
     <section id="cancelar" class="bloco" hidden>
       <h2>Seu agendamento</h2>
       <p id="cancelar-info"></p>
+      <p id="cancelar-prazo" class="aviso"></p>
       <p id="cancelar-msg" class="dica" role="status"></p>
       <button id="cancelar-btn" class="btn" type="button" hidden>Cancelar este agendamento</button>
+      <a id="cancelar-whats" class="btn small" href="#" target="_blank" rel="noopener" hidden>Falar no WhatsApp</a>
       <a class="btn ghost small" href="./">Voltar ao site</a>
     </section>
   </main>
@@ -105,6 +115,8 @@
 
     <!-- Painel -->
     <div id="painel" hidden>
+      <p id="aviso-painel" class="aviso" role="status" hidden></p>
+      <button id="ativar-avisos" class="btn small ghost" type="button">Ativar avisos de novos pedidos</button>
       <h2>Agendamentos</h2>
       <ul id="lista-ag" class="linhas"></ul>
 
@@ -120,6 +132,22 @@
           <label>Preço (R$) <input name="preco" inputmode="decimal" placeholder="80" required></label>
         </div>
         <button class="btn" type="submit">Adicionar serviço</button>
+      </form>
+
+      <h2>Dias e horários sem atendimento</h2>
+      <ul id="lista-bloq" class="linhas"></ul>
+
+      <form id="form-bloq" class="form">
+        <h3>Bloquear dias e horários</h3>
+        <p class="dica">Os horários bloqueados ficam indisponíveis para as clientes. Para um único dia, deixe "Até" em branco.</p>
+        <div class="duas">
+          <label>De <input id="b-de" type="date" required></label>
+          <label>Até (opcional) <input id="b-ate" type="date"></label>
+        </div>
+        <label class="check"><input id="b-dia" type="checkbox" checked> Dia inteiro</label>
+        <div id="b-horas" class="chips" hidden></div>
+        <p id="b-erro" class="erro" role="alert"></p>
+        <button class="btn" type="submit">Bloquear</button>
       </form>
     </div>
   </main>
